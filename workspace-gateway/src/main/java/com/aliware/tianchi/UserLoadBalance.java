@@ -29,65 +29,12 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class UserLoadBalance implements LoadBalance {
 
-    protected static class WeightedRoundRobin {
-        private int weight;
-        private AtomicLong current = new AtomicLong(0);
-        /**
-         * 如果长时间
-         */
-        private int initWeight;
-        public int getWeight() {
-            return weight;
-        }
-
-        public WeightedRoundRobin(int weight, Long current) {
-            this.weight = weight;
-            this.current.set(current);
-        }
-        public WeightedRoundRobin(int initWeight,int weight, Long current) {
-            this.initWeight = initWeight;
-            this.weight = weight;
-            this.current.set(current);
-        }
-
-        public void setWeight(int weight) {
-            this.weight = weight;
-            current.set(0);
-        }
-        public long increaseCurrent() {
-            return current.addAndGet(weight);
-        }
-        public void sel(int total) {
-            current.addAndGet(-1 * total);
-        }
-
-        public void setCurrent(long current) {
-            this.current.set(current);
-        }
-
-        public int getInitWeight() {
-            return initWeight;
-        }
-
-        public void setInitWeight(int initWeight) {
-            this.initWeight = initWeight;
-        }
-
-        @Override
-        public String toString() {
-            return "{" +
-                    "weight=" + weight +
-                    ", current=" + current +
-                    '}';
-        }
-    }
-
-    public static ConcurrentMap<String, UserLoadBalance.WeightedRoundRobin> methodWeightMap = new ConcurrentHashMap<String, UserLoadBalance.WeightedRoundRobin>();
+    static ConcurrentMap<String, Integer> MAX_THREAD_MAP = new ConcurrentHashMap<>();
 
 
     @Override
     public <T> Invoker<T> select(List<Invoker<T>> invokers, URL url, Invocation invocation) {
-        int wSize = methodWeightMap.size();
+        int wSize = MAX_THREAD_MAP.size();
         int iSize = invokers.size();
         //如果权重信息没有加载完 随机
         if(wSize!=iSize){
@@ -95,45 +42,54 @@ public class UserLoadBalance implements LoadBalance {
             return invoker;
         }
 
+        /*
+         * 多寻找几次可用性高的provider
+         */
         long maxCurrent = Long.MIN_VALUE;
-
-        ConcurrentMap<String, ClientStatus> tempMap = new ConcurrentHashMap<>(ClientStatus.getServiceStatistics());
-
         Invoker<T> selectedInvoker = null;
+        ConcurrentMap<String, ClientStatus> tempMap = ClientStatus.getServiceStatistics();
+        int i=0;
+        while (i<5) {
+            i++;
+            for (Invoker<T> invoker : invokers) {
+                URL url1 = invoker.getUrl();
+                String ip = url1.getIp();
+                int port = url1.getPort();
+                String key = ip + port;
+                ClientStatus clientStatus = tempMap.get(key);
+                int initWeight = MAX_THREAD_MAP.get(key);
+                int left = initWeight - clientStatus.activeCount.get();
+                int tempRtt = clientStatus.rtt.get();
+                //如果线程数够多 直接返回
+                if (left > initWeight * 2 / 5) {
+                    return invoker;
+                }
+                //如果剩余可用线程太少 或者 响应时间太大，不优先使用该线程
+                if (left <= 2 || tempRtt > 110) {
+                    continue;
+                }
+                if (maxCurrent < left) {
+                    maxCurrent = left;
+                    selectedInvoker = invoker;
+                }
+            }
+            if (selectedInvoker != null) {
+                return selectedInvoker;
+            }
+        }
+        /*
+         *这后面的可以不要
+         */
+//        maxCurrent = Long.MIN_VALUE;
+//        ConcurrentMap<String, ClientStatus> tempMap = ClientStatus.getServiceStatistics();
+//        selectedInvoker = null;
         for (Invoker<T> invoker : invokers) {
             URL url1 = invoker.getUrl();
             String ip = url1.getIp();
             int port = url1.getPort();
             String key = ip + port;
-            UserLoadBalance.WeightedRoundRobin weightedRoundRobin = methodWeightMap.get(key);
             ClientStatus clientStatus = tempMap.get(key);
-            int initWeight = weightedRoundRobin.getInitWeight();
-            int left = initWeight-clientStatus.activeCount.get();
-            int tempRtt = clientStatus.rtt.get();
-            if(left>initWeight*2/5){
-                return invoker;
-            }
-            if(left<=2 || tempRtt>200){
-                continue;
-            }
-            if(maxCurrent<left){
-                maxCurrent=left;
-                selectedInvoker=invoker;
-            }
-        }
-        if(selectedInvoker!=null){
-            return selectedInvoker;
-        }
-        maxCurrent = Long.MIN_VALUE;
-        tempMap = new ConcurrentHashMap<>(ClientStatus.getServiceStatistics());
-        for (Invoker<T> invoker : invokers) {
-            URL url1 = invoker.getUrl();
-            String ip = url1.getIp();
-            int port = url1.getPort();
-            String key = ip + port;
-            UserLoadBalance.WeightedRoundRobin weightedRoundRobin = methodWeightMap.get(key);
-            ClientStatus clientStatus = tempMap.get(key);
-            int left = weightedRoundRobin.getWeight()-clientStatus.activeCount.get();
+            int left =MAX_THREAD_MAP.get(key)-clientStatus.activeCount.get();
             int rtt = clientStatus.rtt.get();
             if (left>0 && maxCurrent < rtt) {
                 maxCurrent = rtt;
@@ -144,7 +100,8 @@ public class UserLoadBalance implements LoadBalance {
             System.out.println(selectedInvoker.getUrl().getPort());
             return selectedInvoker;
         }
-        // should not happen here
+
+        //如果前面都没有
         return invokers.get(ThreadLocalRandom.current().nextInt(iSize));
     }
 

@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerStatus {
     private static AtomicInteger MAX_THREAD_POOL = new AtomicInteger(0);
+    /**
+     * 获取线程数
+     */
     private static ServerStatus status = new ServerStatus();
 
 
