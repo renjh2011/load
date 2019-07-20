@@ -97,7 +97,7 @@ public class UserLoadBalance implements LoadBalance {
             }
         }
         if(selectedInvoker!=null){
-            System.out.println(selectedInvoker.getUrl().getPort());
+//             System.out.println(selectedInvoker.getUrl().getPort());
             return selectedInvoker;
         }
 
