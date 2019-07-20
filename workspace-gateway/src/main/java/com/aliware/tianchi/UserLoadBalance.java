@@ -59,7 +59,7 @@ public class UserLoadBalance implements LoadBalance {
                     return invoker;
                 }
                 //如果剩余可用线程太少 或者 响应时间太大，不优先使用该线程
-                if (left <= 2 || tempRtt > 110) {
+                if (left <= 2 || tempRtt > 150) {
                     continue;
                 }
                 if (maxCurrent < left) {
