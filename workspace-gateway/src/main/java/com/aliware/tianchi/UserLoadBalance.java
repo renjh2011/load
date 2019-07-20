@@ -13,12 +13,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-//import org.apache.dubbo.common.logger.Logger;
-//import org.apache.dubbo.common.logger.LoggerFactory;
-//import org.apache.dubbo.rpc.RpcStatus;
-//import java.util.ArrayList;
-
 /**
  * @author daofeng.xjf
  *
