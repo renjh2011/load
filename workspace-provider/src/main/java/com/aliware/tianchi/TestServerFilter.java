@@ -16,7 +16,6 @@ import java.util.Map;
  */
 @Activate(group = Constants.PROVIDER)
 public class TestServerFilter implements Filter {
-    volatile static long RTT = 0;
     @Override
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
         try{
@@ -38,7 +37,6 @@ public class TestServerFilter implements Filter {
         map.put(ip+port+"rtt",rtt+"");
         map.put(ip+port+"maxPool",(ServerStatus.getMaxThreadPool()+""));
         result.addAttachments(map);
-        RTT=rtt;
         return result;
     }
 

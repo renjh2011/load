@@ -27,7 +27,7 @@ public class ClientStatus {
         return status;
     }
 
-    public static void responseCount(String key, boolean fail, int rtt1) {
+    public static void responseCount(String key, int rtt1) {
         ClientStatus clientStatus = getStatus(key);
         clientStatus.activeCount.decrementAndGet();
         clientStatus.rtt.set(rtt1);

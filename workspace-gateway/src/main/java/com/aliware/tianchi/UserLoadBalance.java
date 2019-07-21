@@ -21,8 +21,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * 此类可以修改实现，不可以移动类或者修改包名
  * 选手需要基于此类实现自己的负载均衡算法
  */
+
 public class UserLoadBalance implements LoadBalance {
 
+    /**
+     * ConcurrentMap<ip+port,max_pool_size>
+     */
     static ConcurrentMap<String, Integer> MAX_THREAD_MAP = new ConcurrentHashMap<>();
 
 
@@ -42,41 +46,35 @@ public class UserLoadBalance implements LoadBalance {
         long maxCurrent = Long.MIN_VALUE;
         Invoker<T> selectedInvoker = null;
         ConcurrentMap<String, ClientStatus> tempMap = ClientStatus.getServiceStatistics();
-        int i=0;
-        while (i<5) {
-            i++;
-            for (Invoker<T> invoker : invokers) {
-                URL url1 = invoker.getUrl();
-                String ip = url1.getIp();
-                int port = url1.getPort();
-                String key = ip + port;
-                ClientStatus clientStatus = tempMap.get(key);
-                int initWeight = MAX_THREAD_MAP.get(key);
-                int left = initWeight - clientStatus.activeCount.get();
-                int tempRtt = clientStatus.rtt.get();
-                //如果线程数够多 直接返回
-                if (left > initWeight * 2 / 5) {
-                    return invoker;
-                }
-                //如果剩余可用线程太少 或者 响应时间太大，不优先使用该线程
-                if (left <= 2 || tempRtt > 150) {
-                    continue;
-                }
-                if (maxCurrent < left) {
-                    maxCurrent = left;
-                    selectedInvoker = invoker;
-                }
+        for (Invoker<T> invoker : invokers) {
+            URL url1 = invoker.getUrl();
+            String ip = url1.getIp();
+            int port = url1.getPort();
+            String key = ip + port;
+            ClientStatus clientStatus = tempMap.get(key);
+            int initWeight = MAX_THREAD_MAP.get(key);
+            int left = initWeight - clientStatus.activeCount.get();
+            int tempRtt = clientStatus.rtt.get();
+            //如果线程数够多 直接返回
+            if (left > initWeight * 2 / 5) {
+                return invoker;
             }
-            if (selectedInvoker != null) {
-                return selectedInvoker;
+            //如果剩余可用线程太少 或者 响应时间太大，不优先使用该线程
+            if (left <= 10 || tempRtt > 150) {
+                continue;
+            }
+            if (maxCurrent < left) {
+                maxCurrent = left;
+                selectedInvoker = invoker;
             }
         }
+        if (selectedInvoker != null) {
+            return selectedInvoker;
+        }
+
         /*
-         *这后面的可以不要
+         * 寻找rtt最小的provider
          */
-//        maxCurrent = Long.MIN_VALUE;
-//        ConcurrentMap<String, ClientStatus> tempMap = ClientStatus.getServiceStatistics();
-//        selectedInvoker = null;
         for (Invoker<T> invoker : invokers) {
             URL url1 = invoker.getUrl();
             String ip = url1.getIp();
@@ -91,7 +89,6 @@ public class UserLoadBalance implements LoadBalance {
             }
         }
         if(selectedInvoker!=null){
-//             System.out.println(selectedInvoker.getUrl().getPort());
             return selectedInvoker;
         }
 

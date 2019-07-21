@@ -25,7 +25,7 @@ public class TestClientFilter implements Filter {
             Result result = invoker.invoke(invocation);
             return result;
         } catch (Exception e) {
-            ClientStatus.responseCount(key, true, (int) (System.currentTimeMillis() - start));
+            ClientStatus.responseCount(key, (int) (System.currentTimeMillis() - start));
             throw e;
         }
     }
@@ -35,19 +35,19 @@ public class TestClientFilter implements Filter {
         String ip = invoker.getUrl().getIp();
         int port = invoker.getUrl().getPort();
         String key = ip + port;
-        boolean isFailed = false;
-        //初始化每个provider对应的线程池
+        //初始化每个provider对应的线程池 callback方式当线程池满了之后 不会回调
         if (!result.hasException() && UserLoadBalance.MAX_THREAD_MAP.get(key) == null) {
             String maxThreadPool = result.getAttachment(key + "maxPool");
-            UserLoadBalance.MAX_THREAD_MAP.put(key, maxThreadPool == null ? 100 : Integer.parseInt(maxThreadPool));
+            if(maxThreadPool!=null) {
+                UserLoadBalance.MAX_THREAD_MAP.put(key, Integer.parseInt(maxThreadPool));
+            }
         }
         String rtt = result.getAttachment(key + "rtt");
         if (result.hasException()) {
-            isFailed = true;
             rtt = "1000";
         }
 
-        ClientStatus.responseCount(ip + port, isFailed, rtt == null || rtt.isEmpty() ? 0 : Integer.parseInt(rtt));
+        ClientStatus.responseCount(ip + port, rtt == null || rtt.isEmpty() ? 0 : Integer.parseInt(rtt));
         return result;
     }
 }
