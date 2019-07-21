@@ -65,13 +65,13 @@ public class UserLoadBalance implements LoadBalance {
             int left = initWeight - clientStatus.activeCount.get();
             int tempRtt = clientStatus.rtt.get();
             //如果线程数够多 直接返回
-            if (left > initWeight * 2 / 5) {
+            /*if (left > initWeight * 2 / 5) {
                 return invoker;
             }
             //如果剩余可用线程太少 或者 响应时间太大，不优先使用该线程
             if (left <= 2 || tempRtt > 150) {
                 continue;
-            }
+            }*/
             if (maxCurrent <left) {
                 equalCount=1;
                 equalIndexs[0]=i;
