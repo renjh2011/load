@@ -31,34 +31,28 @@ public class UserLoadBalance implements LoadBalance {
      */
     static ConcurrentMap<String, Integer> MAX_THREAD_MAP = new ConcurrentHashMap<>();
 
+//    @Override
+//    public <T> Invoker<T> select(List<Invoker<T>> invokers, URL url, Invocation invocation) {
+//        Invoker<T> invoker = doSelect(invokers, url, invocation);
+////        System.out.println(invoker.getUrl());
+//        return invoker;
+//    }
     @Override
     public <T> Invoker<T> select(List<Invoker<T>> invokers, URL url, Invocation invocation) {
-        Invoker<T> invoker = doSelect(invokers, url, invocation);
-//        System.out.println(invoker.getUrl());
-        return invoker;
-    }
-    public <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation) {
         int wSize = MAX_THREAD_MAP.size();
         int iSize = invokers.size();
         //如果权重信息没有加载完 随机
         if(wSize!=iSize){
-            Invoker<T> invoker = invokers.get(ThreadLocalRandom.current().nextInt(invokers.size()));
-            return invoker;
+            return invokers.get(ThreadLocalRandom.current().nextInt(invokers.size()));
         }
 
-        /*
-         * 多寻找几次可用性高的provider
-         */
-        long maxLeft = Long.MIN_VALUE;
-//        Invoker<T> selectedInvoker = null;
+        int equalCount=0;
+        int[] equalIndexs=new int[iSize];
+        int[] weights=new int[iSize];
+        boolean equalLeft = true;
+        int firstLeft = 0;
 
-        int totalWeight = 0;
-        int firstWeight = 0;
-        int[] equalIndexs = new int[iSize];
-        String[] wightKey = new String[iSize];
-        Map<String,Integer> map = new HashMap<>();
-        int equalCount = 0;
-        boolean equalWeight = true;
+        long maxCurrent = Long.MIN_VALUE;
         ConcurrentMap<String, ClientStatus> tempMap = ClientStatus.getServiceStatistics();
         for (int i=0;i<iSize;i++) {
             Invoker<T> invoker = invokers.get(i);
@@ -69,47 +63,50 @@ public class UserLoadBalance implements LoadBalance {
             ClientStatus clientStatus = tempMap.get(key);
             int initWeight = MAX_THREAD_MAP.get(key);
             int left = initWeight - clientStatus.activeCount.get();
-
-            if (maxLeft <left) {
-                maxLeft = left;
-//                selectedInvoker = invoker;
-                equalIndexs[0] = i;
-                wightKey[0]=key;
+            int tempRtt = clientStatus.rtt.get();
+            //如果线程数够多 直接返回
+            if (left > initWeight * 2 / 5) {
+                return invoker;
+            }
+            //如果剩余可用线程太少 或者 响应时间太大，不优先使用该线程
+            if (left <= 2 || tempRtt > 150) {
+                continue;
+            }
+            if (maxCurrent <left) {
                 equalCount=1;
-                totalWeight = initWeight;
-                firstWeight = initWeight;
-                equalWeight = true;
-            }else if(maxLeft==left){
-                map.put(key,left);
+                equalIndexs[0]=i;
+                weights[0]=initWeight;
+                maxCurrent = left;
+                firstLeft=initWeight;
+                equalLeft=true;
+//                selectedInvoker = invoker;
+            }else if(maxCurrent==left){
                 equalIndexs[equalCount] = i;
-                wightKey[equalCount] = key;
+                weights[equalCount] = initWeight;
                 equalCount++;
-                totalWeight += initWeight;
-                if (equalWeight && i > 0
-                        && initWeight != firstWeight) {
-                    equalWeight = false;
+                if (equalLeft  && initWeight != firstLeft) {
+                    equalLeft = false;
                 }
             }
         }
         if (equalCount == 1) {
             return invokers.get(equalIndexs[0]);
         }
+
+        int maxWeight = -1;
         Invoker<T> selectedInvoker = null;
-//        System.out.println(map);
-        if (!equalWeight && totalWeight > 0) {
-            int maxWeight = 0;
-            for (int i = 0; i < equalCount; i++) {
-                int equalIndex = equalIndexs[i];
-                if(maxWeight<MAX_THREAD_MAP.get(wightKey[i])){
-                    maxWeight=MAX_THREAD_MAP.get(wightKey[i]);
-                    selectedInvoker=invokers.get(equalIndex);
-                }
-            }
-            if(selectedInvoker!=null){
-                return selectedInvoker;
+        for (int i = 0; i < equalCount; i++) {
+            int equalIndex = equalIndexs[i];
+            int weight = weights[i];
+            if(maxWeight<weight){
+                maxWeight=weight;
+                selectedInvoker=invokers.get(equalIndex);
             }
         }
-
+        if(selectedInvoker!=null){
+//            System.out.println(selectedInvoker.getUrl());
+            return selectedInvoker;
+        }
         /*
          * 寻找rtt最小的provider
          */
@@ -121,8 +118,8 @@ public class UserLoadBalance implements LoadBalance {
             ClientStatus clientStatus = tempMap.get(key);
             int left =MAX_THREAD_MAP.get(key)-clientStatus.activeCount.get();
             int rtt = clientStatus.rtt.get();
-            if (left>0 && maxLeft < rtt) {
-                maxLeft = rtt;
+            if (left>0 && maxCurrent < rtt) {
+                maxCurrent = rtt;
                 selectedInvoker = invoker;
             }
         }
