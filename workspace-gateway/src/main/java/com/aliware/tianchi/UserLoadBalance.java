@@ -75,7 +75,7 @@ public class UserLoadBalance implements LoadBalance {
             if (maxCurrent <left) {
                 equalCount=1;
                 equalIndexs[0]=i;
-                weights[0]=initWeight;
+                weights[0]=tempRtt;
                 maxCurrent = left;
                 firstLeft=initWeight;
                 equalLeft=true;
@@ -93,13 +93,14 @@ public class UserLoadBalance implements LoadBalance {
             return invokers.get(equalIndexs[0]);
         }
 
-        int maxWeight = -1;
+        //换成weight或者rtt
+        int minWeight = Integer.MAX_VALUE;
         Invoker<T> selectedInvoker = null;
         for (int i = 0; i < equalCount; i++) {
             int equalIndex = equalIndexs[i];
             int weight = weights[i];
-            if(maxWeight<weight){
-                maxWeight=weight;
+            if(minWeight>weight){
+                minWeight=weight;
                 selectedInvoker=invokers.get(equalIndex);
             }
         }
